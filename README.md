@@ -155,6 +155,14 @@ snyk:
     always_pass: false
 
 # (Optional)
+# APM configuration section.
+apm:
+  # (Optional)
+  # APM service name to use for submitting metrics to datadog.
+  # This is the name used for the CI pipelines.
+  service_name: my-service-name
+
+# (Optional)
 # Buildkite configuration section.
 buildkite:
   # (Optional)
@@ -184,6 +192,11 @@ buildkite:
     - from: target/${workspace}.zip
       to: target/package.zip
 ```
+
+## Updating Toolbox
+
+To update Toolbox, get the latest versions of the tools by running the script [get-latest-toolbox-versions.sh](scripts/get-latest-toolbox-versions.sh).
+Update the [Dockerfile](Dockerfile) accordingly by bumping up the software versions. When this is merged back to the master branch, draft a new [release](https://github.com/seek-oss/toolbox/releases).
 
 <!-- Links -->
 [01]: Dockerfile

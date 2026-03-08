@@ -4,7 +4,7 @@ TOOLBOX_VERSION ?= latest
 # Toolbox Docker image. Default image is exposed as a separate variable to
 # allow importing Makefiles to override TOOLBOX_IMAGE but still retain a
 # reference to the default to use to specify as a base image build arg.
-DEFAULT_TOOLBOX_IMAGE := seek/toolbox:$(TOOLBOX_VERSION)
+DEFAULT_TOOLBOX_IMAGE := ghcr.io/seek-oss/toolbox:$(TOOLBOX_VERSION)
 TOOLBOX_IMAGE         ?= $(DEFAULT_TOOLBOX_IMAGE)
 
 # The TOOLBOX_CONFIG_FILE variable can be specified by the caller to override
@@ -31,6 +31,8 @@ PRE_TOOLBOX_HOOK ?=
 # A default value is set for local testing purposes.
 export BUILDKITE_PIPELINE_SLUG ?= $(shell basename $(shell pwd))
 
+export TOOLBOX_BUILDKITE_PLAN_ONLY ?= false
+
 # Local build artifacts directory.
 build_dir := target
 
@@ -56,6 +58,7 @@ _toolbox = \
 		-e BUILDKITE_JOB_ID \
 		-e BUILDKITE_AGENT_ACCESS_TOKEN \
 		-e TERM \
+		-e TOOLBOX_BUILDKITE_PLAN_ONLY \
 		-v "$$(pwd):/work" \
 		-v "$(HOME)/.aws:/root/.aws" \
 		-v "/var/run/docker.sock:/var/run/docker.sock" \

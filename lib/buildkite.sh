@@ -22,8 +22,13 @@ bk_pipeline() {
   _bk_tf_validate_step
   _bk_snyk_steps
   _bk_wait_step
-  _bk_tf_plan_steps
-  _bk_tf_apply_steps
+
+  if [[ "${TOOLBOX_BUILDKITE_PLAN_ONLY:-false}" == "true" ]]; then
+    _bk_tf_plan_local_steps
+  else
+    _bk_tf_plan_steps
+    _bk_tf_apply_steps
+  fi
 }
 
 ##
@@ -85,6 +90,35 @@ _bk_sh_lint_step() {
   agents:
     queue: ${queue}
 EOF
+}
+
+##
+## Print the APM environment variables.
+##
+_bk_apm_environment_vars() {
+  local workspace_filter="${1}"
+  local deployment_service
+  deployment_service="$(config_value apm.service_name null)"
+
+  if [[ "${deployment_service}" != null ]]; then
+    local environment="development"
+    local is_production
+
+    while IFS=$'\t' read -r is_production; do
+      if [[ "${is_production}" == true ]]; then
+        environment="production"
+      fi
+      cat << EOF
+  env:
+    DD_DEPLOYMENT_ENVIRONMENT: ${environment}
+    DD_DEPLOYMENT_SERVICE: ${deployment_service}
+EOF
+    done < <(jq -r \
+      '.terraform.workspaces // []
+      | map(select(.name == "'"${workspace_filter}"'"))
+      | map([.is_production])[]
+      | @tsv' <<< "${config_json}")
+  fi
 }
 
 ##
@@ -208,6 +242,42 @@ EOF
 }
 
 ##
+## Print local-only Terraform plan steps for each workspace.
+##
+_bk_tf_plan_local_steps() {
+  local total_workspaces
+  total_workspaces="$(_bk_tf_total_workspaces)"
+  if [[ "${total_workspaces}" == 0 ]]; then
+    return 0
+  fi
+
+  local workspace queue artifact_plugin
+  while IFS=$'\t' read -r workspace queue; do
+    artifact_plugin="$(_bk_tf_artifacts_plugin "${workspace}" plan)"
+
+    cat << EOF
+- label: ":terraform: Plan [${workspace}]"
+  command:
+  - make terraform-plan-local WORKSPACE=${workspace}
+  - make buildkite-plan-annotate WORKSPACE=${workspace}
+  plugins:
+  - ${artifact_plugin}
+  agents:
+    queue: ${queue}
+  retry:
+    manual:
+      permit_on_passed: true
+  concurrency: 1
+  concurrency_group: ${_bk_pipeline_slug}/${workspace}
+EOF
+  done < <(jq -r \
+    '.terraform.workspaces // []
+    | map(select(.queue != null))
+    | map([.name, .queue])[]
+    | @tsv' <<< "${config_json}")
+}
+
+##
 ## Print a Terraform apply step for each workspace. This function will first print a
 ## wait or block step, followed by apply steps for each non-production workspace,
 ## followed by another wait or block step, followed by apply steps for each production
@@ -278,6 +348,7 @@ _bk_tf_apply_steps_filter() {
   concurrency: 1
   concurrency_group: ${_bk_pipeline_slug}/${workspace}
 EOF
+    _bk_apm_environment_vars "${workspace}"
   done < <(jq -r \
     '.terraform.workspaces // []
     '"${match_filter}"'
